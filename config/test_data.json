@@ -1,0 +1,23 @@
+{
+  "base_url": "https://www.ebay.com",
+  "headless": false,
+  "slow_mo": 100,
+  "scenarios": [
+    {
+      "query": "shoes",
+      "max_price": 800,
+      "limit": 5,
+      "currency": "ILS"
+    },
+    {
+      "query": "laptop",
+      "max_price": 1800,
+      "limit": 3,
+      "currency": "ILS"
+    }
+  ],
+  "credentials": {
+    "username": "",
+    "password": ""
+  }
+}

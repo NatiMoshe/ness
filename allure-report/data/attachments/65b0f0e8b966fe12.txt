@@ -1,0 +1,1 @@
+selector="[class*='total']"  raw='ILS 56.03'  parsed=56.03

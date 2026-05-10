@@ -1,0 +1,4 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","0","test_assert_cart_standalone","tests","2026-05-10","skipped","2026-05-10","TestEbayE2E","test_ebay_e2e","",""
+"Search for 'shoes', filter by max price $800.0, collect up to 5 items, add to cart, assert total.","234346","eBay: 'shoes' under $800.0","tests","2026-05-10","passed","2026-05-10","TestEbayE2E","test_ebay_e2e","",""
+"","12976","test_search_returns_urls","tests","2026-05-10","passed","2026-05-10","TestEbayE2E","test_ebay_e2e","",""

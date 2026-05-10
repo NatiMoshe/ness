@@ -1,0 +1,2 @@
+Cart total: $56.03
+Threshold: $4000.00 ($800.0 x 5)
