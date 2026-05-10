@@ -1,6 +1,8 @@
-# Bug Analysis — AI-Generated Code
+# AI-Generated Code Bug Analysis
 
 Static review of the code snippet provided in the assignment. No tools or runtime were used.
+
+## The Code Under Review
 
 ```python
 from playwright.sync_api import sync_playwright
@@ -62,8 +64,6 @@ def test_search_functionality():
         browser.close()
 ```
 
-That `with` block is what makes Playwright actually shut things down properly when you're done.
-
 ---
 
 ## Bug 3 — `time.sleep()` Instead of Playwright's Built-in Waiting
@@ -71,8 +71,6 @@ That `with` block is what makes Playwright actually shut things down properly wh
 **Lines:** `time.sleep(2)` and `time.sleep(3)`
 
 **Problem:**  
-Two hardcoded sleeps: 2 seconds after the page loads, 3 seconds after the click.
-
 Playwright has a built-in auto-waiting mechanism: actions like `.fill()`, `.click()`, and `.locator()` already wait for the element to be attached, visible, stable, and enabled before acting. Hardcoded `sleep()` calls are:
 
 - **Unreliable** — too short on a slow network, wastefully long on a fast machine.
@@ -81,9 +79,11 @@ Playwright has a built-in auto-waiting mechanism: actions like `.fill()`, `.clic
 
 **Fix:**
 ```python
+# After page.goto(), wait for a specific element instead of sleeping
 page.goto("https://example.com")
-page.wait_for_load_state("domcontentloaded")
+page.wait_for_load_state("domcontentloaded")   # or "networkidle"
 
+# After clicking the search button, wait for results to appear
 page.locator(".button").click()
 page.wait_for_selector(".result-item", state="visible", timeout=10_000)
 ```
@@ -97,15 +97,13 @@ page.wait_for_selector(".result-item", state="visible", timeout=10_000)
 **Problem:**  
 `.button` is a very broad selector that matches *any* element with class `button` on the page. Most pages have multiple such elements (navigation buttons, close buttons, form resets, etc.). Playwright will click whichever one appears first in the DOM, which is likely not the search-submit button. This leads to non-deterministic behavior that is hard to debug.
 
-The tricky part is this doesn't fail loudly. It clicks *something*, moves on, and you're left debugging why the test doesn't behave as expected.
-
-**Fix:**
+**Fix:** Use a selector that uniquely identifies the search submit button:
 ```python
-# Option A — by accessible label or text
-page.get_by_role("button", name="Search").click()
-
-# Option B — by type + context
+# Option A — by type + context
 page.locator("button[type='submit']").click()
+
+# Option B — by accessible label or text
+page.get_by_role("button", name="Search").click()
 
 # Option C — by a specific ID or data attribute
 page.locator("#search-btn").click()
@@ -115,8 +113,9 @@ page.locator("#search-btn").click()
 
 ## Bug 5 — `results` Assigned But Never Asserted or Returned (Silent Pass)
 
-`page.locator(".result-item")` is lazy in Playwright — calling it doesn't actually check if anything exists in the DOM. It just creates a handle. And then `results` is never used again. The function just returns.
+**Line:** `results = page.locator(".result-item")`
 
+**Problem:**  
 `page.locator()` in Playwright is lazy — it does **not** query the DOM immediately and does **not** raise an error if no elements match. The variable `results` is assigned but then the function ends without:
 
 - asserting that at least one result exists
@@ -137,12 +136,12 @@ expect(results.first).to_be_visible()
 
 ---
 
-## Summary
+## Summary Table
 
-Five bugs found in total — three of them high severity:
-
-1. **Unused Selenium import** — dead code that crashes on any environment without Selenium installed
-2. **Missing context manager** — the Playwright subprocess leaks resources when the test exits or throws
-3. **`time.sleep()` instead of auto-wait** — unreliable, slow, and masks real failures
-4. **`.button` selector is too broad** — non-deterministically clicks the wrong element
-5. **No assertion on results** — the test silently passes even when search returns nothing
+| # | Line(s) | Category | Severity |
+|---|---------|----------|---------|
+| 1 | `from selenium import webdriver` | Wrong import / dead code | Medium |
+| 2 | `sync_playwright().start()...` | Resource leak / missing context manager | High |
+| 3 | `time.sleep(2)`, `time.sleep(3)` | Flaky wait strategy | High |
+| 4 | `page.locator(".button").click()` | Ambiguous / fragile locator | Medium |
+| 5 | `results = page.locator(...)` | Missing assertion (silent pass) | High |
