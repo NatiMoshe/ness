@@ -1,96 +1,116 @@
 # eBay E2E Automation — Playwright + Python
 
-Automates the eBay shopping flow: search with a price filter → add items to cart → verify the total doesn't exceed the budget.
+End-to-end automation for eBay shopping flow: search with price filter → add to cart → assert total.
+
+---
+
+## Architecture
+
+```
+.
+├── config/
+│   └── test_data.json       # Data-Driven: all test inputs (query, max_price, limit, credentials)
+├── pages/                   # Page Object Model
+│   ├── base_page.py         # BasePage: navigate, screenshot, shared locator helpers
+│   ├── login_page.py        # LoginPage: eBay sign-in or guest mode
+│   ├── search_page.py       # SearchPage: search + price filter + pagination
+│   ├── item_page.py         # ItemPage: variant selection + add to cart
+│   └── cart_page.py         # CartPage: subtotal reading + assertion
+├── tests/
+│   └── test_ebay_e2e.py     # Pytest test class — orchestrates the 4 core functions
+├── utils/
+│   ├── config_loader.py     # Loads test_data.json; ENV vars override config
+│   └── price_parser.py      # Parses eBay price strings ($12.99, $10 to $25, etc.)
+├── screenshots/             # Per-action PNG screenshots (also attached to Allure)
+├── allure-results/          # Allure raw JSON (generate HTML report with allure serve)
+├── conftest.py              # Session-scoped browser + function-scoped page fixtures
+├── pytest.ini               # Test runner config
+└── requirements.txt
+```
+
+### Design Patterns
+
+| Pattern | Where applied |
+|---------|---------------|
+| **Page Object Model (POM)** | One class per eBay page, each encapsulates all locators and interactions for that page |
+| **OOP / SRP** | BasePage provides shared utilities; subclasses only contain page-specific logic |
+| **Data-Driven** | All test parameters live in `config/test_data.json`; override via ENV for CI profiles |
+| **Allure reporting** | `@allure.step`, `allure.attach` on every meaningful action; screenshots embedded |
 
 ---
 
 ## Prerequisites
 
 - Python 3.11+
-- Java 11+ (required by Allure CLI)
-- Allure CLI — install once:
-  - **Windows (Scoop):** `scoop install allure`
-  - **Mac (Homebrew):** `brew install allure`
-  - **Manual:** download from [github.com/allure-framework/allure2/releases](https://github.com/allure-framework/allure2/releases), extract, add `bin/` to PATH
+- Node.js (required internally by Playwright)
 
----
-
-## How to Run
-
-**Create and activate a virtual environment:**
-```bash
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# Mac/Linux
-source .venv/bin/activate
-```
-
-**Install dependencies:**
 ```bash
 pip install -r requirements.txt
 playwright install chromium
 ```
 
-**Run the tests:**
-```bash
-pytest -v
-```
+---
 
-**Run with Allure reporting:**
+## Running the Tests
+
 ```bash
-pytest --alluredir=allure-results -v
+# Run all tests
+pytest
+
+# Run headless (CI mode)
+HEADLESS=true pytest
+
+# Run a specific scenario index
+pytest tests/test_ebay_e2e.py::TestEbayE2E::test_full_flow
+
+# With Allure report
+pytest
 allure serve allure-results
 ```
 
-`allure serve` generates the report and opens it in your browser automatically.
+### ENV Variable Overrides
 
-**Headless mode (CI):**
-```bash
-HEADLESS=true pytest -v
-```
-
-Test inputs (search query, max price, item limit) live in `config/test_data.json`. You can also override via environment variables: `HEADLESS`, `SLOW_MO`, `EBAY_USERNAME`, `EBAY_PASSWORD`.
-
----
-
-## Architecture
-
-The project follows the **Page Object Model** — one class per eBay page, all locators and interactions kept inside that class. Tests only orchestrate; they don't touch selectors directly.
-
-```
-pages/
-  base_page.py     # shared helpers: navigate, screenshot, overlay dismissal, bot-challenge wait
-  login_page.py    # guest login flow
-  search_page.py   # search + URL price filter + sidebar filter + pagination
-  item_page.py     # variant selection + add to cart
-  cart_page.py     # open cart + read subtotal + assert total
-
-tests/
-  test_ebay_e2e.py # three test cases wiring the 4 core functions
-
-config/
-  test_data.json   # all test inputs (data-driven)
-
-utils/
-  price_parser.py  # handles "$12.99", "$10 to $25", ILS, etc.
-  config_loader.py # loads test_data.json, ENV vars take precedence
-```
-
-Every meaningful action attaches a screenshot and an Allure step, so failures are easy to diagnose.
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `HEADLESS` | Run browser headless | `HEADLESS=true` |
+| `SLOW_MO` | Milliseconds between actions | `SLOW_MO=0` |
+| `EBAY_USERNAME` | eBay account username | `EBAY_USERNAME=me@email.com` |
+| `EBAY_PASSWORD` | eBay account password | `EBAY_PASSWORD=secret` |
+| `TEST_CONFIG_PATH` | Override config file path | `TEST_CONFIG_PATH=/ci/config.json` |
 
 ---
 
 ## Limitations & Assumptions
 
-- **Guest mode by default.** Credentials are empty in `test_data.json`, so tests run as a guest. eBay guest cart works for most items but is less stable than a logged-in session. Fill in `EBAY_USERNAME` / `EBAY_PASSWORD` to run logged in.
+**Authentication / Guest Mode**  
+If `credentials.username` and `credentials.password` are empty in `test_data.json` (the default), the test runs as a guest. eBay supports guest cart for most items. Set `EBAY_USERNAME` / `EBAY_PASSWORD` for a logged-in session, which is more reliable for cart total reading.
 
-- **Bot detection.** eBay blocks automated traffic aggressively. The tests run with `headless=false` and a small delay between actions to reduce this. If you hit consistent blocks, a residential proxy is the next step.
+**Currency**  
+Prices are parsed assuming USD (`$`). Adjust `utils/price_parser.py` if running against a non-USD eBay domain.
 
-- **ILS currency.** From an Israeli IP, eBay shows prices in ILS. The `max_price` in `test_data.json` should be set in ILS accordingly (e.g. 800 ILS for shoes instead of $220 USD).
+**eBay Bot Detection**  
+eBay uses bot-detection heuristics. Running with `headless=false` and a realistic `slow_mo` (default 400 ms) reduces blocking. If requests are consistently blocked, a residential proxy may be needed.
 
-- **Variant selection is random.** When an item has size/color options, a random available choice is picked. Some combinations may be out of stock; those items are skipped and logged.
+**Variant Selection**  
+Variants (size, color) are picked randomly from available options. Some items may require a specific combination that's in stock — the test logs and skips any item where "Add to cart" is not reachable after variant selection.
 
-- **Auction-only items are skipped.** If there's no "Add to cart" button (only "Place bid"), the item is logged and skipped.
+**Auction-Only Items**  
+Items with only a "Bid" option (no "Add to cart") are skipped with a logged warning.
 
-- **Price ranges.** Items shown as "$10–$25" are evaluated on the lower bound. The actual price added to cart depends on the chosen variant.
+**Price Range Items**  
+Items displayed as "$10.00 to $25.00" are evaluated against the lower bound. If the lower bound ≤ `max_price`, the URL is included; the actual added price depends on the variant chosen.
+
+---
+
+## Allure Report
+
+After running the tests:
+
+```bash
+allure serve allure-results
+```
+
+Each Allure report includes:
+- Step-by-step breakdown of each function
+- Screenshots embedded at every key action
+- Item URLs collected, cart total, and assertion details
